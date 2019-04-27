@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmeter-slave${SLAVE_NUM}
+  labels:
+    name: jmeter-slave${SLAVE_NUM}
+spec:
+  ports:
+    - port: 1099
+      name: jmeter
+  selector:
+    app: jmeter-slave${SLAVE_NUM}
+  type: NodePort
+    
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmeter-slave${SLAVE_NUM}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jmeter-slave${SLAVE_NUM}
+  template:
+    metadata:
+      labels:
+        app: jmeter-slave${SLAVE_NUM}
+    spec:
+      containers:
+        - name: jmeter
+          image: #TODO /docker-jmeter:latest
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c"]
+          args: ["/jmeter/bin/jmeter-server -Jserver.rmi.ssl.disable=true"]
+          ports:
+            - containerPort: 1099

@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+  type: NodePort
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      volumes:
+        - name: html
+          emptyDir: {}
+        - name: report
+          emptyDir: {}
+        - name: jmx
+          configMap:
+            name: jmx-config
+            items:
+            - key: performance-test-scenario.jmx
+              path: performance-test-scenario.jmx
+        - name: indexhtml
+          configMap:
+            name: indexhtml-config
+            items:
+            - key: index.html
+              path: index.html
+
+      initContainers:
+        - name: inithtml
+          image: #TODO /centos7:latest
+          command: ['/bin/sh', '-c', 'cp /indexhtml/index.html /html']
+          volumeMounts: 
+            - name: indexhtml
+              mountPath: /indexhtml
+            - name: html
+              mountPath: /html
+
+      containers:
+        - name: nginx
+          image: #TODO /nginx:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html 
+              mountPath: /usr/share/nginx/html
+
+        - name: jmeter-master
+          image: #TODO /docker-jmeter:latest
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c"]
+          args: ["/jmeter/bin/jmeter -Jserver.rmi.ssl.disable=true -n -t /jmx/performance-test-scenario.jmx -l log.jtl -R $SLAVE_SERVER_LIST && 
+          echo 'start creating report dashboard...' && 
+          /jmeter/bin/jmeter -g log.jtl -o /report && 
+          echo 'success creating report dashboard!' && 
+          cp -rfp /report/* /html &&
+          tail -f log.jtl"]
+          ports:
+            - containerPort: 1099
+          volumeMounts:
+            - name: report 
+              mountPath: /report
+            - name: jmx
+              mountPath: /jmx
+            - name: html
+              mountPath: /html
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    app: web
+  name: web
+spec:
+  rules:
+  - host: #TODO
+    http:
+      paths:
+      - backend:
+          serviceName: web
+          servicePort: 80
